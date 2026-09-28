@@ -1,6 +1,4 @@
-from pathlib import Path
-p = Path("/mnt/data/chatgpt-user-bubble-color.user.js")
-p.write_text(r"""// ==UserScript==
+// ==UserScript==
 // @name         ChatGPT User Bubble Color Customizer
 // @namespace    https://chatgpt.com/
 // @version      1.0.0
@@ -235,5 +233,3 @@ p.write_text(r"""// ==UserScript==
         init();
     }
 })();
-""", encoding="utf-8")
-print(p)

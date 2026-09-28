@@ -20,9 +20,7 @@ ChatGPT에서 **내가 보낸 메시지 말풍선 색상**을 원하는 색으�
 
 ### One-click Install
 
-**[🎨 Install Script](https://raw.githubusercontent.com/USERNAME/REPOSITORY/main/chatgpt-user-bubble-color.user.js)**
-
-> 위 링크의 `USERNAME/REPOSITORY`는 실제 GitHub 저장소 주소로 바꿔주세요.
+**[🎨 Install Script](https://raw.githubusercontent.com/spidychoipro/random_script/main/chatgpt-user-bubble-color.user.js)**
 
 링크를 클릭하면 Tampermonkey의 설치 화면이 열립니다.
 
