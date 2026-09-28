@@ -43,7 +43,7 @@ ChatGPT 화면에 **🎨 버튼**이 나타납니다. 드래그로 원하는 위
 버튼을 누르면 설정 패널이 열립니다.
 
 ```text
-사용자 말풍선 색상          v2.0.0
+사용자 말풍선 색상          v2.0.1
 
 [ 🎨 ] [ #2B2D42 ]
 
@@ -71,20 +71,32 @@ ChatGPT 화면에 **🎨 버튼**이 나타납니다. 드래그로 원하는 위
 
 ## 🔧 How It Works
 
-v2.0.0은 예전의 하드코딩된 클래스(`user-message-bubble-color`)에 의존하지 않고,
-ChatGPT가 실제로 쓰는 역할 기반 속성을 1순위로 사용합니다.
+사용자 말풍선은 ChatGPT가 직접 스타일링하는 요소이므로, **배경색과 텍스트 색만**
+덮어씁니다. `padding`·`border-radius`·`max-width`는 ChatGPT가 소유하는 값이라 건드리지
+않습니다.
 
-| 순서 | 선택자 |
-| --- | --- |
-| 1순위 | `[data-message-author-role="user"] .whitespace-pre-wrap` |
-| 1순위 | `[data-message-author-role="user"] .markdown` |
-| 2순위 | `[data-turn="user"] .whitespace-pre-wrap` / `.markdown` |
-| 3순위 | `.user-message-bubble-color` (구버전 호환) |
-| 폴백 | 위를 모두 못 찾으면 역할 컨테이너에서 콘텐츠 노드를 직접 탐색 |
+```html
+<div class="corner-superellipse/0.98 relative min-w-0 overflow-hidden
+            rounded-[22px] px-4 py-2.5 leading-6
+            user-message-bubble-color max-w-(--user-chat-width,70%)">
+  <div class="max-w-full min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap">…</div>
+</div>
+```
 
-1순위 선택자가 DOM에 있으면 CSS만으로 처리하고, 하나도 없으면 JS가 `tm-user-bubble-active`
-클래스를 직접 붙입니다. 색상은 CSS 변수로 주입되므로(`--tm-ub-bg`, `--tm-ub-fg`)
-스타일 시트를 다시 만들 필요가 없습니다. 비활성화 상태에서는 `revert`로 ChatGPT 기본값을
+위 마크업에서 색을 칠할 대상은 바깥 `div`이고, `whitespace-pre-wrap`은 **텍스트 컨테이너**입니다.
+
+| 순서 | 대상 | 처리 |
+| --- | --- | --- |
+| 1순위 | `.user-message-bubble-color` | 배경·텍스트 색만 변경 |
+| 2순위 | `[data-message-author-role="user"]` / `[data-turn="user"]` 안의 콘텐츠 노드 | 말풍선이 없을 때만 말풍선 모양까지 생성 |
+| 폴백 | 위를 모두 못 찾으면 텍스트 노드 최상위 부모를 탐색 | JS가 `tm-user-bubble-active` 부여 |
+
+2순위 선택자는 `:not(.user-message-bubble-color *)`로 실제 말풍선 내부를 제외합니다.
+이게 없으면 말풍선 안에 말풍선이 또 생깁니다.
+
+`user-message-bubble-color`가 DOM에 있으면 CSS만으로 처리하고, 없을 때만 JS가
+클래스를 붙입니다. 색상은 CSS 변수로 주입되므로(`--tm-ub-bg`, `--tm-ub-fg`) 스타일
+시트를 다시 만들 필요가 없습니다. 비활성화 상태에서는 `revert`로 ChatGPT 기본값을
 그대로 복원합니다.
 
 ## 📁 Project Structure
@@ -118,6 +130,10 @@ npm test
 
 ## 📝 Changelog
 
+- **2.0.1** — 실제 라이브 DOM 확인 결과 `user-message-bubble-color`가 말풍선 요소에
+  그대로 남아 있음을 확인. 말풍선이 아닐 때만 fallback 선택자가stylish히 적용되도록
+  `:not(.user-message-bubble-color *)` 가드를 추가하고, 실제 말풍선의
+  `padding`/`border-radius` 오버라이드를 제거
 - **2.0.0** — 현재 ChatGPT DOM(`data-message-author-role` / `data-turn`) 기준으로
   선택자 전면 개편, 투명도·프리셋·토글·드래그gable 버튼·단축키·메뉴 명령 추가
 - **1.1.0** — 컬러 피커, HEX 입력, 자동 저장

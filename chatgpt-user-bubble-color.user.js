@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT User Bubble Color Customizer
 // @namespace    https://github.com/spidychoipro/random_script
-// @version      2.0.0
+// @version      2.0.1
 // @description  Customize the background color of your own ChatGPT user message bubbles.
 // @author       spidychoipro
 // @match        https://chatgpt.com/*
@@ -18,7 +18,7 @@
 (() => {
     'use strict';
 
-    const VERSION = '2.0.0';
+    const VERSION = '2.0.1';
 
     const STORAGE_KEY = 'chatgpt-user-bubble-color';
     const STYLE_ID = 'tm-user-bubble-style';
@@ -141,13 +141,14 @@
         return whiteContrast > blackContrast ? '#FFFFFF' : '#101010';
     }
 
-    const STATIC_BUBBLE_SELECTORS = [
-        '[data-message-author-role="user"] .whitespace-pre-wrap',
-        '[data-message-author-role="user"] .markdown',
-        '[data-message-author-role="user"] .prose',
-        '[data-turn="user"] .whitespace-pre-wrap',
-        '[data-turn="user"] .markdown',
-        '.user-message-bubble-color'
+    const BUBBLE_SELECTOR = '.user-message-bubble-color';
+
+    const FALLBACK_BUBBLE_SELECTORS = [
+        '[data-message-author-role="user"] .whitespace-pre-wrap:not(.user-message-bubble-color *)',
+        '[data-message-author-role="user"] .markdown:not(.user-message-bubble-color *)',
+        '[data-message-author-role="user"] .prose:not(.user-message-bubble-color *)',
+        '[data-turn="user"] .whitespace-pre-wrap:not(.user-message-bubble-color *)',
+        '[data-turn="user"] .markdown:not(.user-message-bubble-color *)'
     ].join(',\n            ');
 
     const FALLBACK_CONTENT_SELECTORS = [
@@ -173,33 +174,41 @@
                 --tm-ub-bg: ${toRgba(DEFAULTS.color, DEFAULTS.alpha)};
             }
 
-            ${STATIC_BUBBLE_SELECTORS},
+            ${BUBBLE_SELECTOR},
             .${ACTIVE_CLASS} {
-                box-sizing: border-box;
-                width: fit-content;
-                max-width: 100%;
-                margin-left: auto;
-                padding: 8px 14px;
                 background-color: var(--tm-ub-bg) !important;
                 color: var(--tm-ub-fg) !important;
-                border-radius: 18px !important;
             }
 
-            .${ACTIVE_CLASS} {
-                display: block;
-            }
-
-            ${STATIC_BUBBLE_SELECTORS} *,
+            ${BUBBLE_SELECTOR} *,
             .${ACTIVE_CLASS} * {
                 color: inherit !important;
             }
 
-            :root[data-tm-ub-off="true"] ${STATIC_BUBBLE_SELECTORS},
-            :root[data-tm-ub-off="true"] .${ACTIVE_CLASS} {
+            ${FALLBACK_BUBBLE_SELECTORS} {
+                box-sizing: border-box;
+                width: fit-content;
+                max-width: 100%;
+                margin-left: auto;
+                padding: 10px 16px;
+                background-color: var(--tm-ub-bg) !important;
+                color: var(--tm-ub-fg) !important;
+                border-radius: 22px !important;
+            }
+
+            ${FALLBACK_BUBBLE_SELECTORS} * {
+                color: inherit !important;
+            }
+
+            :root[data-tm-ub-off="true"] ${BUBBLE_SELECTOR},
+            :root[data-tm-ub-off="true"] .${ACTIVE_CLASS},
+            :root[data-tm-ub-off="true"] ${FALLBACK_BUBBLE_SELECTORS} {
                 background-color: revert !important;
                 color: revert !important;
+            }
+
+            :root[data-tm-ub-off="true"] ${FALLBACK_BUBBLE_SELECTORS} {
                 box-sizing: revert;
-                display: revert;
                 width: revert;
                 max-width: revert;
                 margin-left: revert;
@@ -474,22 +483,23 @@
     }
 
     function syncBubbles() {
-        if (document.querySelector(STATIC_BUBBLE_SELECTORS) !== null) {
-            document
-                .querySelectorAll(`.${ACTIVE_CLASS}`)
-                .forEach(element => element.classList.remove(ACTIVE_CLASS));
+        if (document.querySelector(BUBBLE_SELECTOR) === null) {
+            for (const turn of getUserTurns()) {
+                const bubble = resolveBubble(turn);
+
+                if (!bubble) {
+                    continue;
+                }
+
+                bubble.classList.add(ACTIVE_CLASS);
+            }
+
             return;
         }
 
-        for (const turn of getUserTurns()) {
-            const bubble = resolveBubble(turn);
-
-            if (!bubble) {
-                continue;
-            }
-
-            bubble.classList.add(ACTIVE_CLASS);
-        }
+        document
+            .querySelectorAll(`.${ACTIVE_CLASS}`)
+            .forEach(element => element.classList.remove(ACTIVE_CLASS));
     }
 
     function createElement(tag, attributes = {}) {

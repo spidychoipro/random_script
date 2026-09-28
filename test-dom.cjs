@@ -3,6 +3,9 @@ const { JSDOM } = require('jsdom');
 
 const SCRIPT = fs.readFileSync('chatgpt-user-bubble-color.user.js', 'utf8');
 
+const BUBBLE = '.user-message-bubble-color';
+const ACTIVE = 'tm-user-bubble-active';
+
 const PAGE_HTML = `<!doctype html>
 <html>
 <head></head>
@@ -95,16 +98,19 @@ async function main() {
     check('default fg applied', root.style.getPropertyValue('--tm-ub-fg') === '#FFFFFF',
         root.style.getPropertyValue('--tm-ub-fg'));
     check('enabled flag set', root.dataset.tmUbOff === 'false', root.dataset.tmUbOff);
-    check('static selector alone styles modern DOM',
-        doc.querySelectorAll('.tm-user-bubble-active').length === 0,
-        doc.querySelectorAll('.tm-user-bubble-active').length);
+    // This fixture has no real bubble class, so the JS fallback must tag nodes.
+    check('fallback tags bubbles when the real class is absent',
+        doc.querySelectorAll(`.${ACTIVE}`).length === 2,
+        doc.querySelectorAll(`.${ACTIVE}`).length);
 
     const styleText = doc.getElementById('tm-user-bubble-style').textContent;
-    check('static selector uses role attribute',
-        styleText.includes('[data-message-author-role="user"] .whitespace-pre-wrap'));
-    check('static selector uses data-turn fallback',
-        styleText.includes('[data-turn="user"] .markdown'));
-    check('legacy selector kept', styleText.includes('.user-message-bubble-color'));
+    check('styles the real bubble class', styleText.includes(BUBBLE));
+    check('fallback excludes text inside the real bubble',
+        styleText.includes('.whitespace-pre-wrap:not(.user-message-bubble-color *)'),
+        'fallback must not match the inner text div');
+    check('real bubble keeps its own padding and radius',
+        !new RegExp(`${BUBBLE}\\s*,\\s*\\.${ACTIVE}\\s*\\{[^}]*border-radius`).test(styleText),
+        'shape rules must not apply to the real bubble');
 
     toggle.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     check('panel opens on toggle click', panel.classList.contains('open'));
@@ -309,10 +315,18 @@ async function dragCase() {
 }
 
 async function legacyDomCase() {
-    const legacy = `<!doctype html><html><head></head><body>
-      <div data-message-author-role="user"><div class="user-message-bubble-color">legacy</div></div>
-    </body></html>`;
-    const dom = new JSDOM(legacy, { runScripts: 'outside-only', pretendToBeVisual: true });
+    // Verbatim markup captured from a live chatgpt.com user turn.
+    const real = `<!doctype html><html><head></head><body><main>
+      <article data-message-author-role="user" data-turn="user" data-turn-id="t1">
+        <div class="group">
+          <div class="corner-superellipse/0.98 relative min-w-0 overflow-hidden rounded-[22px] px-4 py-2.5 leading-6 user-message-bubble-color max-w-(--user-chat-width,70%)">
+            <div class="max-w-full min-w-0 [overflow-wrap:anywhere] whitespace-pre-wrap">L을 가져가 크림치즈 허니</div>
+          </div>
+        </div>
+      </article>
+    </main></body></html>`;
+
+    const dom = new JSDOM(real, { runScripts: 'outside-only', pretendToBeVisual: true });
     const { window } = dom;
     const storeB = new Map();
     window.GM_getValue = (key, fallback) => (storeB.has(key) ? storeB.get(key) : fallback);
@@ -322,8 +336,25 @@ async function legacyDomCase() {
     await waitForLoad(window);
     window.eval(SCRIPT);
 
-    check('legacy DOM matched by static selector',
-        window.document.querySelectorAll('.tm-user-bubble-active').length === 0);
+    const doc = window.document;
+    const bubble = doc.querySelector(BUBBLE);
+    const inner = bubble.querySelector('.whitespace-pre-wrap');
+
+    check('real markup: no JS tagging needed',
+        doc.querySelectorAll(`.${ACTIVE}`).length === 0,
+        doc.querySelectorAll(`.${ACTIVE}`).length);
+    check('real markup: inner text div not tagged', !inner.classList.contains(ACTIVE));
+
+    const css = doc.getElementById('tm-user-bubble-style').textContent;
+    check('real markup: bubble selector present', css.includes(BUBBLE));
+    check('real markup: fallback excludes inner text div',
+        css.includes('.whitespace-pre-wrap:not(.user-message-bubble-color *)'));
+    check('real markup: shape rules scoped away from real bubble',
+        !new RegExp(`${BUBBLE}\\s*,\\s*\\.${ACTIVE}\\s*\\{[^}]*border-radius`).test(css));
+    check('real markup: reverts to ChatGPT defaults when disabled',
+        css.includes(`:root[data-tm-ub-off="true"] ${BUBBLE}`));
+    check('real markup: inner text div inherits color',
+        css.includes(`${BUBBLE} *`));
 
     const orphanPage = `<!doctype html><html><head></head><body>
       <div data-turn="user"><span data-msg="x">orphan turn</span></div>
