@@ -7,12 +7,15 @@ ChatGPT에서 **내가 보낸 메시지 말풍선 색상**을 원하는 색으�
 ## ✨ Features
 
 - 🎨 원하는 색상으로 사용자 말풍선 변경
-- 🌈 컬러 피커 지원
-- `#RRGGBB` HEX 색상 직접 입력
-- 💾 선택한 색상 자동 저장
-- 🔄 페이지를 새로고침해도 설정 유지
-- ♻️ 기본 색상으로 원클릭 초기화
-- 💬 ChatGPT의 사용자 메시지만 변경
+- 🌈 컬러 피커 + HEX(`#RRGGBB` / `#RGB`) 직접 입력
+- 🔁 투명도(0–100%) 슬라이더
+- 🎛️ 프리셋 색상 12종 원클릭 적용
+- 🔘 한 번에 켜기/끄기
+- 🖱️ 설정 버튼 드래그로 위치 이동 (위치 자동 저장)
+- ⌨️ `Alt+Shift+C` 단축키로 패널 토글
+- 📋 Tampermonkey 메뉴에서도 열기 / 초기화
+- 💾 색상·투명도·상태 자동 저장, 새로고침해도 유지
+- 🌓 밝은 색에도 어두운 색에도 자동 대비 텍스트 적용 (WCAG 대비 계산)
 
 ## 📦 Installation
 
@@ -35,19 +38,29 @@ ChatGPT에서 **내가 보낸 메시지 말풍선 색상**을 원하는 색으�
 
 ## 🎨 Usage
 
-ChatGPT 화면 오른쪽 아래에 **🎨 버튼**이 나타납니다.
+ChatGPT 화면에 **🎨 버튼**이 나타납니다. 드래그로 원하는 위치로 옮길 수 있습니다.
 
-버튼을 누르면 색상 설정 패널이 열립니다.
+버튼을 누르면 설정 패널이 열립니다.
 
 ```text
-사용자 말풍선 색상
+사용자 말풍선 색상          v2.0.0
 
 [ 🎨 ] [ #2B2D42 ]
 
-[ 기본값으로 초기화 ]
+투명도              100%
+[ ==================== ]
+
+[■][■][■][■][■][■]
+[■][■][■][■][■][■]
+
+[  비활성화  ] [  초기화  ]
+
+색상을 선택하면 즉시 적용됩니다.
+버튼을 드래그해 위치를 바꿀 수 있습니다.
 ```
 
-컬러 피커를 사용하거나 HEX 값을 직접 입력하면 즉시 적용됩니다.
+컬러 피커, 프리셋, HEX 입력, 투명도 슬라이더 어디서든 변경하면 즉시 모든 대화의
+사용자 말풍선에 적용됩니다.
 
 ## 🖥️ Supported
 
@@ -58,26 +71,57 @@ ChatGPT 화면 오른쪽 아래에 **🎨 버튼**이 나타납니다.
 
 ## 🔧 How It Works
 
-ChatGPT의 사용자 메시지에 사용되는 다음 클래스를 대상으로 색상을 변경합니다.
+v2.0.0은 예전의 하드코딩된 클래스(`user-message-bubble-color`)에 의존하지 않고,
+ChatGPT가 실제로 쓰는 역할 기반 속성을 1순위로 사용합니다.
 
-```html
-user-message-bubble-color
-```
+| 순서 | 선택자 |
+| --- | --- |
+| 1순위 | `[data-message-author-role="user"] .whitespace-pre-wrap` |
+| 1순위 | `[data-message-author-role="user"] .markdown` |
+| 2순위 | `[data-turn="user"] .whitespace-pre-wrap` / `.markdown` |
+| 3순위 | `.user-message-bubble-color` (구버전 호환) |
+| 폴백 | 위를 모두 못 찾으면 역할 컨테이너에서 콘텐츠 노드를 직접 탐색 |
 
-따라서 Assistant 메시지나 다른 UI 요소의 색상에는 영향을 주지 않습니다.
+1순위 선택자가 DOM에 있으면 CSS만으로 처리하고, 하나도 없으면 JS가 `tm-user-bubble-active`
+클래스를 직접 붙입니다. 색상은 CSS 변수로 주입되므로(`--tm-ub-bg`, `--tm-ub-fg`)
+스타일 시트를 다시 만들 필요가 없습니다. 비활성화 상태에서는 `revert`로 ChatGPT 기본값을
+그대로 복원합니다.
 
 ## 📁 Project Structure
 
 ```text
 .
-└── chatgpt-user-bubble-color.user.js
+├── chatgpt-user-bubble-color.user.js
+├── test-helpers.cjs        # 색상/투명도/대비 계산 단위 테스트
+├── test-dom.cjs            # jsdom 기반 DOM 동작 테스트
+├── package.json
+└── README.md
 ```
+
+## 🧪 Development
+
+```bash
+npm install
+npm test
+```
+
+`test-helpers.cjs`는 순수 함수(HEX 정규화, rgba 변환, WCAG 대비 텍스트 색)를 검증하고,
+`test-dom.cjs`는 jsdom에서 실제 스크립트를 실행해 스타일 주입, 패널 토글, 색상/투명도
+변경, 드래그 위치 저장·복원, 폴백 선택자까지 확인합니다.
 
 ## ⚠️ Notes
 
-ChatGPT의 UI 구조나 클래스 이름이 변경되면 스크립트가 정상적으로 작동하지 않을 수 있습니다.
+- ChatGPT의 DOM 구조는 공식 API가 아니며 언제든 바뀔 수 있습니다.
+- ChatGPT가 말풍선 역할을 완전히 없애면 폴백 탐색이 필요합니다. 그럴 경우 Issue로
+  알려주시면 선택자를 갱신하겠습니다.
+- 설정은 Tampermonkey 저장소(`GM_setValue`)에 보관되므로 브라우저를 지우면 초기화됩니다.
 
-문제가 발생하면 Issue를 등록해주세요.
+## 📝 Changelog
+
+- **2.0.0** — 현재 ChatGPT DOM(`data-message-author-role` / `data-turn`) 기준으로
+  선택자 전면 개편, 투명도·프리셋·토글·드래그gable 버튼·단축키·메뉴 명령 추가
+- **1.1.0** — 컬러 피커, HEX 입력, 자동 저장
+- **1.0.0** — 최초 공개
 
 ---
 

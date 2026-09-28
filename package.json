@@ -1,0 +1,12 @@
+{
+  "name": "random-script",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Tampermonkey userscripts",
+  "scripts": {
+    "test": "node test-helpers.cjs && node test-dom.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0"
+  }
+}
