@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ChatGPT User Bubble Color Customizer
 // @namespace    https://github.com/spidychoipro/random_script
-// @version      2.0.1
+// @version      2.1.0
 // @description  Customize the background color of your own ChatGPT user message bubbles.
 // @author       spidychoipro
 // @match        https://chatgpt.com/*
@@ -18,7 +18,7 @@
 (() => {
     'use strict';
 
-    const VERSION = '2.0.1';
+    const VERSION = '2.1.0';
 
     const STORAGE_KEY = 'chatgpt-user-bubble-color';
     const STYLE_ID = 'tm-user-bubble-style';
@@ -37,6 +37,17 @@
         '#7B2CBF', '#4361EE', '#1D3557', '#0B0B0F'
     ];
 
+    // 버튼은 어디든 옮길 수 있으므로 패널은 항상 이 안으로 들어오도록 계산한다.
+    const LAYOUT = {
+        edgeGap: 12,
+        panelGap: 10,
+        dragThreshold: 4,
+        buttonWidth: 42,
+        buttonHeight: 42,
+        panelWidth: 264,
+        panelHeight: 330
+    };
+
     const ROOT = {
         color: '--tm-ub-color',
         alpha: '--tm-ub-alpha',
@@ -47,6 +58,7 @@
     let state = loadState();
     let observerScheduled = false;
     let suppressObserver = false;
+    let suppressToggleClick = false;
 
     function storageGet(key, fallback) {
         try {
@@ -266,10 +278,13 @@
             }
 
             #tm-ub-panel {
-                position: absolute;
-                right: 0;
-                bottom: 52px;
-                width: min(264px, calc(100vw - 32px));
+                position: fixed;
+                left: 0;
+                top: 0;
+                width: min(264px, calc(100vw - 24px));
+                max-height: calc(100vh - 24px);
+                overflow-y: auto;
+                overscroll-behavior: contain;
                 padding: 14px;
                 border: 1px solid rgba(255, 255, 255, .12);
                 border-radius: 14px;
@@ -615,32 +630,193 @@
         setStatus('기본값으로 초기화됨');
     }
 
+    function getButton() {
+        return document.getElementById('tm-ub-toggle');
+    }
+
+    function getPanel() {
+        return document.getElementById('tm-ub-panel');
+    }
+
+    function getContainer() {
+        return document.getElementById(UI_ID);
+    }
+
+    function measure(element, width, height) {
+        if (!element) {
+            return { width, height };
+        }
+
+        const rect = element.getBoundingClientRect();
+
+        return {
+            width: Math.round(rect.width || element.offsetWidth || width),
+            height: Math.round(rect.height || element.offsetHeight || height)
+        };
+    }
+
+    function getButtonSize() {
+        return measure(
+            getButton(),
+            LAYOUT.buttonWidth,
+            LAYOUT.buttonHeight
+        );
+    }
+
+    function getPanelSize() {
+        return measure(
+            getPanel(),
+            LAYOUT.panelWidth,
+            LAYOUT.panelHeight
+        );
+    }
+
+    function clamp(value, size, viewportSize) {
+        const max = Math.max(
+            LAYOUT.edgeGap,
+            viewportSize - size - LAYOUT.edgeGap
+        );
+
+        return Math.min(Math.max(value, LAYOUT.edgeGap), max);
+    }
+
+    // 후보 위치 중 화면 안에 완전히 들어가는 첫 번째를 고르고,
+    // 들어가는 자리가 없으면 가장 가까운 후보를 화면 안으로 당긴다.
+    function fitAxis(candidates, size, viewportSize) {
+        const max = Math.max(
+            LAYOUT.edgeGap,
+            viewportSize - size - LAYOUT.edgeGap
+        );
+        let fallback = candidates[0];
+
+        for (const candidate of candidates) {
+            fallback = candidate;
+
+            if (candidate >= LAYOUT.edgeGap && candidate <= max) {
+                return candidate;
+            }
+        }
+
+        return clamp(fallback, size, viewportSize);
+    }
+
+    function setContainerPosition(left, top) {
+        const container = getContainer();
+
+        if (!container) {
+            return null;
+        }
+
+        const size = getButtonSize();
+        const position = {
+            left: clamp(left, size.width, window.innerWidth),
+            top: clamp(top, size.height, window.innerHeight)
+        };
+
+        container.style.left = `${position.left}px`;
+        container.style.top = `${position.top}px`;
+        container.style.right = 'auto';
+        container.style.bottom = 'auto';
+
+        return position;
+    }
+
+    function persistPosition() {
+        const button = getButton();
+
+        if (!button) {
+            return;
+        }
+
+        const rect = button.getBoundingClientRect();
+
+        storageSet('left', Math.round(rect.left));
+        storageSet('top', Math.round(rect.top));
+    }
+
+    function placePanel() {
+        const button = getButton();
+        const panel = getPanel();
+
+        if (!panel || !button || !panel.classList.contains('open')) {
+            return;
+        }
+
+        const rect = button.getBoundingClientRect();
+        const panelSize = getPanelSize();
+
+        // 세로: 버튼 위에 먼저 시도, 안 되면 아래, 그래도 안 되면 화면 안으로 당긴다.
+        const top = fitAxis(
+            [
+                rect.top - panelSize.height - LAYOUT.panelGap,
+                rect.bottom + LAYOUT.panelGap
+            ],
+            panelSize.height,
+            window.innerHeight
+        );
+
+        // 가로: 버튼 오른쪽 정렬 -> 왼쪽 정렬 -> 가운데 정렬 순으로 시도한다.
+        const left = fitAxis(
+            [
+                rect.right - panelSize.width,
+                rect.left,
+                rect.left + rect.width / 2 - panelSize.width / 2
+            ],
+            panelSize.width,
+            window.innerWidth
+        );
+
+        panel.style.left = `${Math.round(left)}px`;
+        panel.style.top = `${Math.round(top)}px`;
+    }
+
     function loadPosition() {
-        const container = document.getElementById(UI_ID);
-        const right = storageGet('right', null);
-        const bottom = storageGet('bottom', null);
+        const container = getContainer();
 
         if (!container) {
             return;
         }
 
-        if (Number.isFinite(right)) {
-            container.style.right = `${right}px`;
+        const size = getButtonSize();
+        const left = storageGet('left', null);
+        const top = storageGet('top', null);
+
+        if (Number.isFinite(left) && Number.isFinite(top)) {
+            setContainerPosition(left, top);
+            return;
         }
 
-        if (Number.isFinite(bottom)) {
-            container.style.bottom = `${bottom}px`;
+        // 2.0.x 는 right/bottom 만 저장했다.
+        const right = storageGet('right', null);
+        const bottom = storageGet('bottom', null);
+
+        if (Number.isFinite(right) && Number.isFinite(bottom)) {
+            setContainerPosition(
+                window.innerWidth - right - size.width,
+                window.innerHeight - bottom - size.height
+            );
         }
     }
 
     function makeDraggable(button) {
         let dragging = false;
+        let moved = false;
+        let startX = 0;
+        let startY = 0;
         let offsetX = 0;
         let offsetY = 0;
 
         button.addEventListener('pointerdown', event => {
+            if (typeof event.button === 'number' && event.button !== 0) {
+                return;
+            }
+
             const rect = button.getBoundingClientRect();
+
             dragging = true;
+            moved = false;
+            startX = event.clientX;
+            startY = event.clientY;
             offsetX = event.clientX - rect.left;
             offsetY = event.clientY - rect.top;
             button.setPointerCapture?.(event.pointerId);
@@ -651,22 +827,23 @@
                 return;
             }
 
-            const width = button.offsetWidth;
-            const height = button.offsetHeight;
-            const left = Math.min(
-                Math.max(event.clientX - offsetX, 4),
-                window.innerWidth - width - 4
-            );
-            const top = Math.min(
-                Math.max(event.clientY - offsetY, 4),
-                window.innerHeight - height - 4
+            if (!moved) {
+                const dx = Math.abs(event.clientX - startX);
+                const dy = Math.abs(event.clientY - startY);
+
+                if (dx < LAYOUT.dragThreshold && dy < LAYOUT.dragThreshold) {
+                    return;
+                }
+
+                moved = true;
+            }
+
+            setContainerPosition(
+                event.clientX - offsetX,
+                event.clientY - offsetY
             );
 
-            const container = document.getElementById(UI_ID);
-            container.style.left = `${left}px`;
-            container.style.top = `${top}px`;
-            container.style.right = 'auto';
-            container.style.bottom = 'auto';
+            placePanel();
         });
 
         const endDrag = event => {
@@ -677,18 +854,32 @@
             dragging = false;
             button.releasePointerCapture?.(event.pointerId);
 
-            const rect = button.getBoundingClientRect();
-            storageSet('right', Math.round(window.innerWidth - rect.right));
-            storageSet('bottom', Math.round(window.innerHeight - rect.bottom));
+            if (moved) {
+                // 드래그를 마치면 click 이 발생하므로 패널이 열리지 않게 막는다.
+                suppressToggleClick = true;
+                persistPosition();
+            }
+
+            moved = false;
         };
 
         button.addEventListener('pointerup', endDrag);
         button.addEventListener('pointercancel', endDrag);
     }
 
+    function consumeDragClick() {
+        if (!suppressToggleClick) {
+            return false;
+        }
+
+        suppressToggleClick = false;
+
+        return true;
+    }
+
     function togglePanel(force) {
-        const panel = document.getElementById('tm-ub-panel');
-        const button = document.getElementById('tm-ub-toggle');
+        const panel = getPanel();
+        const button = getButton();
 
         if (!panel || !button) {
             return;
@@ -701,10 +892,7 @@
         button.setAttribute('aria-expanded', String(shouldOpen));
 
         if (shouldOpen) {
-            const rect = button.getBoundingClientRect();
-            const flipBelow = rect.top < 260;
-            panel.style.bottom = flipBelow ? 'auto' : '52px';
-            panel.style.top = flipBelow ? '52px' : 'auto';
+            placePanel();
         }
     }
 
@@ -815,7 +1003,7 @@
 
         const hint = createElement('div', {
             id: 'tm-ub-hint',
-            textContent: '버튼을 드래그해 위치를 바꿀 수 있습니다. Alt+Shift+C로 패널 토글.'
+            textContent: '버튼을 드래그해 위치를 바꿀 수 있습니다. 패널은 항상 화면 안에 열립니다. Alt+Shift+C로 토글.'
         });
 
         const toggle = createElement('button', {
@@ -833,6 +1021,11 @@
 
         toggle.addEventListener('click', event => {
             event.stopPropagation();
+
+            if (consumeDragClick()) {
+                return;
+            }
+
             togglePanel();
         });
 
@@ -914,6 +1107,20 @@
         });
     }
 
+    function handleViewportChange() {
+        scheduleRefresh();
+
+        const container = getContainer();
+
+        if (container) {
+            const rect = container.getBoundingClientRect();
+
+            setContainerPosition(rect.left, rect.top);
+        }
+
+        placePanel();
+    }
+
     function isOwnMutation(mutation) {
         const container = document.getElementById(UI_ID);
         const target = mutation.target instanceof Node ? mutation.target : null;
@@ -942,7 +1149,7 @@
         });
         observer.observe(document.documentElement, { childList: true, subtree: true });
 
-        window.addEventListener('resize', () => scheduleRefresh());
+        window.addEventListener('resize', handleViewportChange);
 
         if (typeof GM_registerMenuCommand === 'function') {
             try {
