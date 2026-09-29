@@ -60,6 +60,29 @@ function nextFrame(window) {
     });
 }
 
+// jsdom 에는 레이아웃이 없으므로 고정 위치 요소의 rect 를 흉내내야 한다.
+function makeRect(left, top, width, height) {
+    return {
+        left, top, width, height,
+        right: left + width, bottom: top + height, x: left, y: top
+    };
+}
+
+function stylePosition(element) {
+    return {
+        left: Number.parseFloat(element.style.left) || 0,
+        top: Number.parseFloat(element.style.top) || 0
+    };
+}
+
+// 고정한 컨테이너의 inline 위치가 곧 버튼의 뷰포트 위치가 된다.
+function followContainer(element, container, width, height) {
+    element.getBoundingClientRect = () => {
+        const { left, top } = stylePosition(container);
+        return makeRect(left, top, width, height);
+    };
+}
+
 async function main() {
     const dom = new JSDOM(PAGE_HTML, {
         runScripts: 'outside-only',
@@ -209,6 +232,7 @@ async function main() {
         styleText.includes('[data-message-author-role="user"] .whitespace-pre-wrap'));
 
     await dragCase();
+    await panelCase();
 
     console.log(`\nmain: ${passed} passed, ${failed} failed`);
 }
@@ -250,9 +274,10 @@ async function dragCase() {
     preColor.value = '#1B998B';
     preColor.dispatchEvent(new window.Event('input', { bubbles: true }));
 
-    button.getBoundingClientRect = () => ({
-        left: 100, top: 200, width: 42, height: 42, right: 142, bottom: 242, x: 100, y: 200
-    });
+    // 고정한 컨테이너의 위치가 곧 버튼 위치가 되도록 rect 를 흉내낸다.
+    container.style.left = '100px';
+    container.style.top = '200px';
+    followContainer(button, container, 42, 42);
     button.offsetWidth = 42;
     button.offsetHeight = 42;
 
@@ -272,9 +297,18 @@ async function dragCase() {
 
     const saved = dragStore.get('chatgpt-user-bubble-color');
     check('drag position persisted',
-        saved.right === window.innerWidth - 142 && saved.bottom === window.innerHeight - 242,
-        `${saved.right} / ${saved.bottom}`);
+        saved.left === 290 && saved.top === 390,
+        `${saved.left} / ${saved.top}`);
     check('drag does not clobber color', saved.color === '#1B998B', saved.color);
+
+    const dragPanel = doc.getElementById('tm-ub-panel');
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    check('drag does not open the panel', !dragPanel.classList.contains('open'));
+
+    button.dispatchEvent(pointer('pointerdown', 300, 400));
+    button.dispatchEvent(pointer('pointerup', 300, 400));
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    check('click without movement still opens the panel', dragPanel.classList.contains('open'));
 
     const reloadDom = new JSDOM(dragPage, {
         runScripts: 'outside-only',
@@ -296,8 +330,10 @@ async function dragCase() {
     const reloadDoc = reloadDom.window.document;
     const reloadContainer = reloadDoc.getElementById('tm-bubble-customizer');
 
-    check('position restored on reload', reloadContainer.style.right === `${saved.right}px`,
-        reloadContainer.style.right);
+    check('position restored on reload', reloadContainer.style.left === '290px',
+        reloadContainer.style.left);
+    check('vertical position restored on reload', reloadContainer.style.top === '390px',
+        reloadContainer.style.top);
     check('color restored on reload',
         reloadDoc.documentElement.style.getPropertyValue('--tm-ub-color') === '#FF0000',
         reloadDoc.documentElement.style.getPropertyValue('--tm-ub-color'));
@@ -312,6 +348,161 @@ async function dragCase() {
         reloadDoc.documentElement.dataset.tmUbOff);
     check('disabled state reverts bubble styles',
         reloadDoc.getElementById('tm-user-bubble-style').textContent.includes('revert'));
+}
+
+async function panelCase() {
+    const page = `<!doctype html><html><head></head><body>
+      <div data-turn="user"><div data-message-author-role="user">
+        <div class="whitespace-pre-wrap">panel page</div>
+      </div></div>
+    </body></html>`;
+
+    const VIEW_W = 500;
+    const VIEW_H = 420;
+    const PANEL_W = 264;
+    const PANEL_H = 330;
+    const EDGE = 12;
+
+    const dom = new JSDOM(page, {
+        runScripts: 'outside-only',
+        pretendToBeVisual: true,
+        url: 'https://chatgpt.com/'
+    });
+
+    const { window } = dom;
+    const storeD = new Map();
+
+    Object.defineProperty(window, 'innerWidth', { value: VIEW_W, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: VIEW_H, configurable: true });
+
+    window.GM_getValue = (key, fallback) => (storeD.has(key) ? storeD.get(key) : fallback);
+    window.GM_setValue = (key, value) => storeD.set(key, value);
+    window.GM_registerMenuCommand = () => {};
+
+    window.PointerEvent = class PointerEvent extends window.MouseEvent {
+        constructor(type, init = {}) {
+            super(type, init);
+            this.pointerId = init.pointerId ?? 1;
+        }
+    };
+
+    await waitForLoad(window);
+    window.eval(SCRIPT);
+
+    const doc = window.document;
+    const button = doc.getElementById('tm-ub-toggle');
+    const panel = doc.getElementById('tm-ub-panel');
+    const container = doc.getElementById('tm-bubble-customizer');
+
+    followContainer(button, container, 42, 42);
+    followContainer(container, container, 42, 42);
+    button.offsetWidth = 42;
+    button.offsetHeight = 42;
+    panel.getBoundingClientRect = () => makeRect(0, 0, PANEL_W, PANEL_H);
+
+    const place = (left, top) => {
+        container.style.left = `${left}px`;
+        container.style.top = `${top}px`;
+    };
+
+    const openPanel = () => {
+        if (panel.classList.contains('open')) {
+            doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        }
+
+        button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    };
+
+    const panelBox = () => ({
+        left: Number.parseFloat(panel.style.left),
+        top: Number.parseFloat(panel.style.top)
+    });
+
+    const fullyVisible = () => {
+        const { left, top } = panelBox();
+        return left >= EDGE &&
+            top >= EDGE &&
+            left + PANEL_W <= VIEW_W - EDGE &&
+            top + PANEL_H <= VIEW_H - EDGE;
+    };
+
+    const checkVisible = (name, left, top) => {
+        const box = panelBox();
+        check(name, fullyVisible(), `${box.left} / ${box.top}`);
+        check(`${name} (expected position)`, box.left === left && box.top === top,
+            `${box.left} / ${box.top} expected ${left} / ${top}`);
+    };
+
+    // 왼쪽 아래: 2.0.1 은 여기서 패널을 화면 밖으로 내보냈다.
+    place(4, 300);
+    openPanel();
+    checkVisible('panel at bottom-left stays inside the viewport', 12, 78);
+
+    // 왼쪽 위: 세로 공간이 없으면 아래로 뒤집는다.
+    place(4, 8);
+    openPanel();
+    checkVisible('panel flips below near the top edge', 12, 60);
+
+    // 오른쪽 아래(기본 위치 근처): 위쪽 + 오른쪽 정렬을 유지한다.
+    place(440, 360);
+    openPanel();
+    checkVisible('panel stays above and right-aligned at the default spot', 218, 20);
+
+    // 가운데: 세로 공간이 애매하면 화면 안쪽으로 당긴다.
+    place(230, 200);
+    openPanel();
+    check('panel stays visible near the middle of the screen', fullyVisible(),
+        JSON.stringify(panelBox()));
+
+    // 실제 드래그로 화면 밖으로 밀어낸 뒤에도 열 수 있어야 한다.
+    doc.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    check('panel closed before the corner drag', !panel.classList.contains('open'));
+
+    place(0, 0);
+    const pointer = (type, clientX, clientY) => new window.PointerEvent(type, {
+        clientX, clientY, bubbles: true, pointerId: 1
+    });
+    button.dispatchEvent(pointer('pointerdown', 10, 10));
+    button.dispatchEvent(pointer('pointermove', -60, -60));
+    button.dispatchEvent(pointer('pointerup', -60, -60));
+
+    check('drag keeps the button inside the viewport',
+        container.style.left === '12px' && container.style.top === '12px',
+        `${container.style.left} / ${container.style.top}`);
+
+    const dragState = storeD.get('chatgpt-user-bubble-color');
+    check('clamped position is persisted',
+        dragState.left === 12 && dragState.top === 12,
+        `${dragState.left} / ${dragState.top}`);
+
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    check('dragging to the corner does not open the panel',
+        !panel.classList.contains('open'));
+
+    openPanel();
+    check('panel opens fully visible after dragging to the corner', fullyVisible(),
+        JSON.stringify(panelBox()));
+
+    // 창을 줄여도 버튼이 화면 밖으로 사라지지 않는다.
+    place(480, 400);
+    window.dispatchEvent(new window.Event('resize'));
+    check('resize pulls the button back into the viewport',
+        container.style.left === '446px' && container.style.top === '366px',
+        `${container.style.left} / ${container.style.top}`);
+    check('panel is re-placed after resize', fullyVisible(), JSON.stringify(panelBox()));
+
+    // 화면보다 패널이 크면 안쪽으로 고정되고 CSS max-height 로 스크롤된다.
+    Object.defineProperty(window, 'innerHeight', { value: 300, configurable: true });
+    window.dispatchEvent(new window.Event('resize'));
+    check('panel stays inside a very short viewport', fullyVisible(),
+        JSON.stringify(panelBox()));
+
+    const panelStyle = doc.getElementById('tm-user-bubble-style').textContent;
+    check('panel is fixed positioned, not anchored to the button',
+        panelStyle.includes('#tm-ub-panel') && /#tm-ub-panel\s*\{[^}]*position: fixed/.test(panelStyle));
+    check('panel scrolls instead of being cut off',
+        /#tm-ub-panel\s*\{[^}]*max-height: calc\(100vh - 24px\)/.test(panelStyle) &&
+        /#tm-ub-panel\s*\{[^}]*overflow-y: auto/.test(panelStyle));
 }
 
 async function legacyDomCase() {
