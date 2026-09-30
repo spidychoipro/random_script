@@ -124,7 +124,9 @@ async function scenario(name, html, prepare, assert) {
     const ctx = prepare({ window, doc, opened });
     await new Promise(resolve => setTimeout(resolve, 30));
 
-    assert({ window, doc, opened, calls: ctx });
+    // assert 는 async 일 수 있다 (PiP 진입/이탈 확인). 끝까지 기다려야
+    // 요약 출력 뒤에 결과가 뒤섞이지 않는다.
+    await assert({ window, doc, opened, calls: ctx });
 }
 
 async function main() {
@@ -291,6 +293,115 @@ async function main() {
 
             check('no video: navigation not blocked', notPrevented);
             check('no video: no new tab', opened.length === 0, JSON.stringify(opened));
+        }
+    );
+
+    // 영상 재생 시작만으로 PiP 요청이 나간다. 단축키나 링크 클릭이 없어도 된다.
+    await scenario(
+        'auto-on-play',
+        page(LIVE_VIDEO),
+        ({ window, doc }) => stubVideo(window, doc.querySelector('video')),
+        ({ doc, calls }) => {
+            check('auto: no PiP before playback starts', calls.pip === 0, calls.pip);
+
+            doc.querySelector('video').dispatchEvent(new doc.defaultView.Event('play'));
+            check('auto: play event requests PiP', calls.pip === 1, calls.pip);
+        }
+    );
+
+    // 이미 PiP 인데 또 play 가 와도 중복 요청하지 않는다
+    await scenario(
+        'auto-on-play-twice',
+        page(LIVE_VIDEO),
+        ({ window, doc }) => stubVideo(window, doc.querySelector('video')),
+        ({ doc, calls }) => {
+            const video = doc.querySelector('video');
+            video.dispatchEvent(new doc.defaultView.Event('play'));
+            video.dispatchEvent(new doc.defaultView.Event('play'));
+            check('auto: repeated play does not re-request', calls.pip === 1, calls.pip);
+        }
+    );
+
+    // 재생 안 하고 멈춰있을 땐 자동 PiP 안 된다
+    await scenario(
+        'auto-on-play-paused',
+        page(LIVE_VIDEO),
+        ({ window, doc }) => stubVideo(window, doc.querySelector('video'), { paused: true }),
+        ({ doc, calls }) => {
+            doc.querySelector('video').dispatchEvent(new doc.defaultView.Event('play'));
+            check('auto: paused video does not trigger PiP', calls.pip === 0, calls.pip);
+        }
+    );
+
+    // PiP 에서는 플레이어 스타일을 걷어내고 고유 크기로 고정한다.
+    // 이게 없으면 PiP 창이 플레이어 레이아웃 크기를 따라간다.
+    await scenario(
+        'pip-style',
+        page(LIVE_VIDEO),
+        ({ window, doc }) => {
+            const video = doc.querySelector('video');
+            const calls = stubVideo(window, video, { width: 1920, height: 1080 });
+
+            return calls;
+        },
+        async ({ doc, window }) => {
+            const video = doc.querySelector('video');
+
+            // 치지직 플레이어가 거는 스타일 흉내
+            video.style.transform = 'scale(1.4)';
+            video.style.position = 'absolute';
+            video.style.width = '760px';
+
+            window.__czpTogglePip();
+            await new Promise(resolve => setTimeout(resolve, 30));
+
+            check('pip-style: style element injected',
+                doc.getElementById('czp-pip-style') !== null);
+            check('pip-style: video marked', video.hasAttribute('data-czp-pip-active'));
+            check('pip-style: pinned to intrinsic width',
+                video.style.getPropertyValue('--czp-pip-w') === '1920px',
+                video.style.getPropertyValue('--czp-pip-w'));
+            check('pip-style: pinned to intrinsic height',
+                video.style.getPropertyValue('--czp-pip-h') === '1080px',
+                video.style.getPropertyValue('--czp-pip-h'));
+        }
+    );
+
+    // PiP 끝나면 표시했던 속성은 되돌린다
+    await scenario(
+        'pip-style-restore',
+        page(LIVE_VIDEO),
+        ({ window, doc }) => stubVideo(window, doc.querySelector('video')),
+        async ({ doc, window }) => {
+            const video = doc.querySelector('video');
+            video.style.width = '760px';
+
+            window.__czpTogglePip();
+            await new Promise(resolve => setTimeout(resolve, 30));
+            check('restore: marked while in PiP', video.hasAttribute('data-czp-pip-active'));
+
+            window.__czpTogglePip();
+            await new Promise(resolve => setTimeout(resolve, 30));
+            check('restore: attribute cleared after exit',
+                !video.hasAttribute('data-czp-pip-active'));
+        }
+    );
+
+    // readyState 낮아서 videoWidth 가 0 이면 크기 고정을 건너뛴다
+    await scenario(
+        'pip-style-no-dimensions',
+        page(LIVE_VIDEO),
+        ({ window, doc }) => stubVideo(window, doc.querySelector('video'), { width: 0, height: 0 }),
+        async ({ doc, window }) => {
+            const video = doc.querySelector('video');
+
+            window.__czpTogglePip();
+            await new Promise(resolve => setTimeout(resolve, 30));
+
+            check('no-dimensions: still marked', video.hasAttribute('data-czp-pip-active'));
+            check('no-dimensions: no bogus size pinned',
+                video.style.getPropertyValue('--czp-pip-w') === '',
+                video.style.getPropertyValue('--czp-pip-w'));
         }
     );
 
