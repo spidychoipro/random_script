@@ -4,7 +4,7 @@
   "private": true,
   "description": "Tampermonkey userscripts",
   "scripts": {
-    "test": "node test-helpers.cjs && node test-dom.cjs"
+    "test": "node test-helpers.cjs && node test-dom.cjs && node test-chzzk-pip.cjs && node test-chzzk-pip-dom.cjs"
   },
   "devDependencies": {
     "jsdom": "^26.0.0"
