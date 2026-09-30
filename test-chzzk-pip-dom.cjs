@@ -296,40 +296,43 @@ async function main() {
         }
     );
 
-    // 영상 재생 시작만으로 PiP 요청이 나간다. 단축키나 링크 클릭이 없어도 된다.
+    // 영상 재생 시작만으로는 PiP 를 띄우지 않는다. (#9)
+    // 켜자마자 창이 떠오는 게 거슬렸던 것. 사용자가 다른 곳으로 나갈 때만 붙인다.
     await scenario(
-        'auto-on-play',
+        'no-auto-on-play',
         page(LIVE_VIDEO),
         ({ window, doc }) => stubVideo(window, doc.querySelector('video')),
         ({ doc, calls }) => {
-            check('auto: no PiP before playback starts', calls.pip === 0, calls.pip);
-
             doc.querySelector('video').dispatchEvent(new doc.defaultView.Event('play'));
-            check('auto: play event requests PiP', calls.pip === 1, calls.pip);
+            check('no-auto-on-play: play does not request PiP', calls.pip === 0, calls.pip);
         }
     );
 
-    // 이미 PiP 인데 또 play 가 와도 중복 요청하지 않는다
+    // 재생 상태가 바뀌어도(재생/일시정지 반복) 자동으로 붙지 않는다
     await scenario(
-        'auto-on-play-twice',
+        'no-auto-on-state-change',
         page(LIVE_VIDEO),
         ({ window, doc }) => stubVideo(window, doc.querySelector('video')),
         ({ doc, calls }) => {
             const video = doc.querySelector('video');
-            video.dispatchEvent(new doc.defaultView.Event('play'));
-            video.dispatchEvent(new doc.defaultView.Event('play'));
-            check('auto: repeated play does not re-request', calls.pip === 1, calls.pip);
+
+            for (let i = 0; i < 3; i += 1) {
+                video.dispatchEvent(new doc.defaultView.Event('play'));
+                video.dispatchEvent(new doc.defaultView.Event('playing'));
+                video.dispatchEvent(new doc.defaultView.Event('pause'));
+            }
+
+            check('no-auto-on-state-change: still no PiP', calls.pip === 0, calls.pip);
         }
     );
 
-    // 재생 안 하고 멈춰있을 땐 자동 PiP 안 된다
+    // 재생 중이어도 링크를 안 누르면 PiP 요청 자체가 없다
     await scenario(
-        'auto-on-play-paused',
-        page(LIVE_VIDEO),
-        ({ window, doc }) => stubVideo(window, doc.querySelector('video'), { paused: true }),
+        'no-auto-without-navigation',
+        page(LIVE_VIDEO + externalLink()),
+        ({ window, doc }) => stubVideo(window, doc.querySelector('video')),
         ({ doc, calls }) => {
-            doc.querySelector('video').dispatchEvent(new doc.defaultView.Event('play'));
-            check('auto: paused video does not trigger PiP', calls.pip === 0, calls.pip);
+            check('no-auto-without-navigation: nothing happens on load', calls.pip === 0, calls.pip);
         }
     );
 
