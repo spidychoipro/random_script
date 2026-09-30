@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chzzk Auto PiP
 // @namespace    https://github.com/spidychoipro/random_script
-// @version      1.1.0
+// @version      1.1.1
 // @description  치지직에서 영상 보고 다른 사이트로 이동할 때 자동으로 PiP를 띄워줍니다.
 // @author       spidychoipro
 // @match        https://chzzk.naver.com/*
@@ -60,13 +60,11 @@ video[${PIP_ACTIVE_ATTR}] {
         enabled: true,
         openInNewTab: true,
         autoPipOnTabSwitch: true,
-        autoPipOnPlay: true,
         neutralizePlayerStyle: true
     };
 
     let toastTimer = null;
     let gestureHintShown = false;
-    let autoPipOnPlayShown = false;
 
     function readSettings() {
         const stored = GM_getValue(STORAGE_KEY, {}) || {};
@@ -75,7 +73,6 @@ video[${PIP_ACTIVE_ATTR}] {
             enabled: stored.enabled !== false,
             openInNewTab: stored.openInNewTab !== false,
             autoPipOnTabSwitch: stored.autoPipOnTabSwitch !== false,
-            autoPipOnPlay: stored.autoPipOnPlay !== false,
             neutralizePlayerStyle: stored.neutralizePlayerStyle !== false
         };
     }
@@ -421,43 +418,6 @@ video[${PIP_ACTIVE_ATTR}] {
         }
     }
 
-    // 영상 재생이 시작되면 곧바로 PiP 를 띄운다. 단축키 누를 필요 없게.
-    // media 이벤트는 안 올라오니까 캡처로 잡는다.
-    function onMediaPlay(event) {
-        const video = event.target;
-
-        if (!video || video.tagName !== 'VIDEO') {
-            return;
-        }
-
-        const settings = readSettings();
-
-        if (!settings.enabled || !settings.autoPipOnPlay || !isActive(video)) {
-            return;
-        }
-
-        if (isInPip(video)) {
-            return;
-        }
-
-        enterPip(video).then(result => {
-            if (result.ok) {
-                if (!autoPipOnPlayShown) {
-                    autoPipOnPlayShown = true;
-                    showToast('영상 켜면 PiP 로 따라갑니다. 끄려면 Alt+Shift+P', 4000);
-                }
-
-                return;
-            }
-
-            // 제스처가 없어서 막힌 경우. 링크 클릭 경로는 사용자가 곧바로
-            // 다른 곳으로 갈 수 있어서 한 번만 안내한다.
-            if (result.reason === 'NotAllowedError' && !isInPip(video) && !gestureHintShown) {
-                hintGesture();
-            }
-        });
-    }
-
     // 탭을 백그라운드로 보낼 때 치지직이 스스로 일시정지하는 경우가 있어서
     // 되살린다. 그래야 PiP 에서 소리가 끊기지 않는다.
     function onVisibilityChange() {
@@ -513,7 +473,6 @@ video[${PIP_ACTIVE_ATTR}] {
         document.addEventListener('click', onDocumentClick, true);
         document.addEventListener('keydown', onKeyDown, true);
         document.addEventListener('visibilitychange', onVisibilityChange, true);
-        document.addEventListener('play', onMediaPlay, true);
         document.addEventListener('leavepictureinpicture', onLeavePip, true);
         registerMenu();
     }
