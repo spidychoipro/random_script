@@ -153,3 +153,87 @@ npm test
 ---
 
 Made for customizing your own ChatGPT UI. 🎨
+
+---
+
+# 📺 Chzzk Auto PiP
+
+> Keep the Chzzk stream in Picture-in-Picture when you leave for another site.
+
+치지직에서 영상 보다가 다른 사이트로 이동하면 PiP 창도 같이 꺼집니다.
+영상 따라가는 걸 귀찮아서 만든 Tampermonkey userscript입니다.
+
+## ✨ Features
+
+- 🔗 다른 사이트 링크를 클릭하면 자동으로 PiP를 띄우고 목적지를 새 탭으로 엽니다
+- 📡 라이브 방송, 다시보기 영상 모두 지원
+- ⌨️ `Alt+Shift+P`로 PiP 수동 토글
+- 🖥️ 다른 탭으로 전환하면 자동으로 PiP를 띄웁니다
+- 📋 Tampermonkey 메뉴에서 기능별 on/off
+- 💭 PiP가 브라우저에 막히면 `Alt+Shift+P`를 누르라고 안내합니다
+- 💾 설정 자동 저장
+
+## 📦 Installation
+
+먼저 [Tampermonkey](https://www.tampermonkey.net/)를 설치하세요.
+
+### One-click Install
+
+**[📺 Install Script](https://raw.githubusercontent.com/spidychoipro/random_script/main/chzzk-auto-pip.user.js)**
+
+링크를 클릭하면 Tampermonkey의 설치 화면이 열립니다.
+
+### Manual Installation
+
+1. `chzzk-auto-pip.user.js` 파일을 엽니다.
+2. 파일 내용을 복사합니다.
+3. Tampermonkey → **Create a new script**
+4. 기존 내용을 삭제합니다.
+5. 복사한 코드를 붙여넣습니다.
+6. 저장합니다.
+
+## 📺 Usage
+
+영상 재생 중 다른 사이트로 가는 링크를 누르면, 그 링크는 **새 탭**으로 열리고
+영상은 PiP로 작게 떠 있습니다. 제목을 클릭하면 PiP가 닫히고,
+`Alt+Shift+P`로 다시 열 수 있습니다.
+
+## 🖥️ Supported
+
+- 치지직 라이브 · 다시보기
+- `chzzk.naver.com`
+- Tampermonkey
+
+## 🔧 How It Works
+
+영상이 MSE(`blob:`)로 재생되고 있어서, 치지직 탭이 사라지면 PiP 창도 함께
+꺼집니다. 그래서 링크 이동을 막고 PiP를 먼저 띄운 뒤, 목적지를 새 탭으로
+열어서 치지직 탭을 남겨 둡니다. 치지직 탭이 살아 있으면 PiP도 살아 있습니다.
+
+라이브와 다시보기는 모두 `video.webplayer-internal-video`를 쓰고 있어서 하나의
+선택자로 잡힙니다. 혹시 바뀔까봐 폴백으로 재생 중인 video 중 해상도가 가장 큰
+것을 고르는 로직도 있습니다.
+
+아래는 **건드리지 않고** 브라우저에 그대로 맡깁니다.
+
+- 치지직 안에서의 이동 (SPA 이동이라 영상은 그대로 살아 있음)
+- `target="_blank"` 링크, `ctrl`/`cmd`/`shift` + 클릭, 우클릭
+- 일시정지 상태의 영상
+- `mailto:`·`tel:`·`javascript:` 같은 링크, `download` 속성 링크
+
+## ⚠️ Notes
+
+- **주소창에 직접 url 을 치거나 브라우저 뒤로가기로 나갈 땐 PiP 가 남지 않습니다.**
+  탭이 닫히는 걸 유저스크립트로는 막을 수 없어서, 링크 클릭만 가로챕니다.
+- 링크를 누르면 같은 탭이 아니라 **새 탭**이 열립니다. 탐색 방식이 달라지는
+  점에 주의하세요.
+- 치지직 DOM은 공식 API가 아니라 언제든 바뀔 수 있습니다. 영상 인식이 안 되면
+  Issue로 알려주시면 선택자를 갱신하겠습니다.
+- PiP는 브라우저 정책상 사용자 동작(클릭 등)이 있어야 붙습니다. 탭 전환 시
+  자동 PiP는 이 이유로 막힐 수 있고, 그럴 땐 토스트로 안내합니다.
+- 설정은 Tampermonkey 저장소(`GM_setValue`)에 보관되므로 브라우저를 지우면
+  초기화됩니다.
+
+## 📝 Changelog
+
+- **1.0.0** — 최초 공개
