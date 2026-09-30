@@ -1,17 +1,4 @@
-# random_script
-
-직접 만든 Tampermonkey userscript 모음입니다.
-
-| 스크립트 | 대상 | 설명 |
-| --- | --- | --- |
-| [ChatGPT User Bubble Color](#-chatgpt-user-bubble-color) | ChatGPT | 내 말풍선 색상·투명도 커스텀 |
-| [Chzzk Auto PiP](#-chzzk-auto-pip) | 치지직 | 다른 사이트로 나갈 때 영상 PiP 유지 |
-
-설치 링크는 각 섹션에 있습니다.
-
----
-
-# 🎨 ChatGPT User Bubble Color
+# ChatGPT User Bubble Color 🎨
 
 > Customize the color of your own ChatGPT message bubbles.
 
@@ -121,11 +108,8 @@ ChatGPT 화면에 **🎨 버튼**이 나타납니다. 드래그로 원하는 위
 ```text
 .
 ├── chatgpt-user-bubble-color.user.js
-├── chzzk-auto-pip.user.js
 ├── test-helpers.cjs        # 색상/투명도/대비 계산 단위 테스트
 ├── test-dom.cjs            # jsdom 기반 DOM 동작 테스트
-├── test-chzzk-pip.cjs      # 치지직 링크 판정 단위 테스트
-├── test-chzzk-pip-dom.cjs  # 치지직 링크 가로채기 jsdom 테스트
 ├── package.json
 └── README.md
 ```
@@ -142,16 +126,33 @@ npm test
 변경, 드래그 위치 저장·복원, 패널의 화면 내 배치(모서리·낮은 높이·창 크기 변경),
 폴백 선택자까지 확인합니다.
 
-`test-chzzk-pip.cjs`는 치지직 링크 판정(외부/내부, `mailto:`, `target`,
-`download` 등)을 검증하고, `test-chzzk-pip-dom.cjs`는 jsdom에서 실제 스크립트를
-실행해 링크 클릭 가로채기와 PiP 요청, 그리고 건드리면 안 되는 케이스까지 확인합니다.
-
 ## ⚠️ Notes
 
 - ChatGPT의 DOM 구조는 공식 API가 아니며 언제든 바뀔 수 있습니다.
 - ChatGPT가 말풍선 역할을 완전히 없애면 폴백 탐색이 필요합니다. 그럴 경우 Issue로
   알려주시면 선택자를 갱신하겠습니다.
 - 설정은 Tampermonkey 저장소(`GM_setValue`)에 보관되므로 브라우저를 지우면 초기화됩니다.
+
+## 📝 Changelog
+
+- **2.1.0** — [#1](https://github.com/spidychoipro/random_script/issues/1) 패널이 버튼 위치와
+  무관하게 고정 위치에 열려서 화면 밖으로 나가는 문제 수정. 패널을 `position: fixed`로 바꾸고
+  버튼 실제 좌표·패널 실제 크기를 잰 뒤 위/아래·좌/우 후보 중 화면 안에 들어가는 쪽으로
+  자동 배치하도록 변경. 하드코딩된 260px 뒤집기 기준 제거. 버튼 위치 저장 방식을
+  `left/top`으로 바꾸고 창 크기가 바뀌거나 화면 밖으로 밀려났을 때 화면 안으로 당기는
+  클램프 추가. 드래그 직후 패널이 자동으로 열리던 동작도 제거
+- **2.0.1** — 실제 라이브 DOM 확인 결과 `user-message-bubble-color`가 말풍선 요소에
+  그대로 남아 있음을 확인. 말풍선이 아닐 때만 fallback 선택자가stylish히 적용되도록
+  `:not(.user-message-bubble-color *)` 가드를 추가하고, 실제 말풍선의
+  `padding`/`border-radius` 오버라이드를 제거
+- **2.0.0** — 현재 ChatGPT DOM(`data-message-author-role` / `data-turn`) 기준으로
+  선택자 전면 개편, 투명도·프리셋·토글·드래그gable 버튼·단축키·메뉴 명령 추가
+- **1.1.0** — 컬러 피커, HEX 입력, 자동 저장
+- **1.0.0** — 최초 공개
+
+---
+
+Made for customizing your own ChatGPT UI. 🎨
 
 ---
 
@@ -180,10 +181,16 @@ npm test
 
 **[📺 Install Script](https://raw.githubusercontent.com/spidychoipro/random_script/main/chzzk-auto-pip.user.js)**
 
+링크를 클릭하면 Tampermonkey의 설치 화면이 열립니다.
+
 ### Manual Installation
 
-`chzzk-auto-pip.user.js` 파일을 열어 내용을 복사한 뒤, Tampermonkey →
-**Create a new script** 에서 기존 내용을 지우고 붙여넣으면 됩니다.
+1. `chzzk-auto-pip.user.js` 파일을 엽니다.
+2. 파일 내용을 복사합니다.
+3. Tampermonkey → **Create a new script**
+4. 기존 내용을 삭제합니다.
+5. 복사한 코드를 붙여넣습니다.
+6. 저장합니다.
 
 ## 📺 Usage
 
@@ -191,7 +198,13 @@ npm test
 영상은 PiP로 작게 떠 있습니다. 제목을 클릭하면 PiP가 닫히고,
 `Alt+Shift+P`로 다시 열 수 있습니다.
 
-## 🧭 How It Works
+## 🖥️ Supported
+
+- 치지직 라이브 · 다시보기
+- `chzzk.naver.com`
+- Tampermonkey
+
+## 🔧 How It Works
 
 영상이 MSE(`blob:`)로 재생되고 있어서, 치지직 탭이 사라지면 PiP 창도 함께
 꺼집니다. 그래서 링크 이동을 막고 PiP를 먼저 띄운 뒤, 목적지를 새 탭으로
@@ -223,21 +236,4 @@ npm test
 
 ## 📝 Changelog
 
-- **1.0.0** — 최초 공개
-
-## 📝 ChatGPT Changelog
-
-- **2.1.0** — [#1](https://github.com/spidychoipro/random_script/issues/1) 패널이 버튼 위치와
-  무관하게 고정 위치에 열려서 화면 밖으로 나가는 문제 수정. 패널을 `position: fixed`로 바꾸고
-  버튼 실제 좌표·패널 실제 크기를 잰 뒤 위/아래·좌/우 후보 중 화면 안에 들어가는 쪽으로
-  자동 배치하도록 변경. 하드코딩된 260px 뒤집기 기준 제거. 버튼 위치 저장 방식을
-  `left/top`으로 바꾸고 창 크기가 바뀌거나 화면 밖으로 밀려났을 때 화면 안으로 당기는
-  클램프 추가. 드래그 직후 패널이 자동으로 열리던 동작도 제거
-- **2.0.1** — 실제 라이브 DOM 확인 결과 `user-message-bubble-color`가 말풍선 요소에
-  그대로 남아 있음을 확인. 말풍선이 아닐 때만 fallback 선택자가stylish히 적용되도록
-  `:not(.user-message-bubble-color *)` 가드를 추가하고, 실제 말풍선의
-  `padding`/`border-radius` 오버라이드를 제거
-- **2.0.0** — 현재 ChatGPT DOM(`data-message-author-role` / `data-turn`) 기준으로
-  선택자 전면 개편, 투명도·프리셋·토글·드래그gable 버튼·단축키·메뉴 명령 추가
-- **1.1.0** — 컬러 피커, HEX 입력, 자동 저장
 - **1.0.0** — 최초 공개
