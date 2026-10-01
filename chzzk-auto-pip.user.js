@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chzzk Auto PiP
 // @namespace    https://github.com/spidychoipro/random_script
-// @version      1.1.1
+// @version      1.1.2
 // @description  치지직에서 영상 보고 다른 사이트로 이동할 때 자동으로 PiP를 띄워줍니다.
 // @author       spidychoipro
 // @match        https://chzzk.naver.com/*
@@ -21,19 +21,18 @@
     const PIP_STYLE_ID = 'czp-pip-style';
     const PIP_ACTIVE_ATTR = 'data-czp-pip-active';
 
-    // PiP 창 크기는 video 엘리먼트의 고유 크기(videoWidth/videoHeight)를
-    // 따라가는 게 정상인데, 치지직 webplayer 가 video 에 width/height 를
-    // 붙여버려서 PiP 창이 그 레이아웃 크기를 따라간다. 그러면 보통 PiP 보다
-    // 창이 크거나 비율이 이상해진다. PiP 중에 엘리먼트를 고유 크기로 고정하고
-    // 플레이어 데코를 걷어내서 일반적인 PiP 모양으로 만든다.
+    // PiP 창 크기는 브라우저가 정하는 게 맞다. 이전엔 video 고유 크기
+    // (1920×1080 등)를 그대로 고정해서 PiP 창이 화면 밖으로 넘치고 영상이
+    // 잘렸다. 이제는 창 크기를 건드리지 않고, 엘리먼트를 창에 100% 로
+    // 맞춰 object-fit 으로만 비율을 지키면서 플레이어 데코를 걷어낸다.
     const PIP_RESET_CSS = `
 video[${PIP_ACTIVE_ATTR}] {
-    width: var(--czp-pip-w) !important;
-    height: var(--czp-pip-h) !important;
+    width: 100% !important;
+    height: 100% !important;
     min-width: 0 !important;
     min-height: 0 !important;
-    max-width: none !important;
-    max-height: none !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
     top: auto !important;
@@ -240,9 +239,10 @@ video[${PIP_ACTIVE_ATTR}] {
             (!video || document.pictureInPictureElement === video);
     }
 
-    // PiP 중에 webplayer 스타일을 무력화하고, 엘리먼트를 영상 고유 크기로
-    // 고정한다. 이게 없으면 PiP 창이 플레이어가 잡아둔 레이아웃 크기를 따라가서
-    // 일반적인 PiP 창 모양이 아니다. PiP 끝나면 원래대로 복원한다.
+    // PiP 중에 webplayer 스타일을 무력화하고, 엘리먼트를 PiP 창 크기에
+    // 맞춰 object-fit 으로 비율만 지킨다. 창 크기 자체는 건드리지
+    // 않으므로 브라우저가 정한 기본 크기가 그대로 쓰인다. PiP 끝나면
+    // 원래대로 복원한다.
     function applyPipStyle(video) {
         if (!video || !readSettings().neutralizePlayerStyle) {
             return;
@@ -255,17 +255,6 @@ video[${PIP_ACTIVE_ATTR}] {
             style.id = PIP_STYLE_ID;
             style.textContent = PIP_RESET_CSS;
             (document.head || document.documentElement).appendChild(style);
-        }
-
-        // PiP 창 크기가 고유 크기를 따라가려면 엘리먼트가 그 크기를 갖도록
-        // 고정해야 한다. readyState 가 낮으면 videoWidth 가 0 일 수 있어서
-        // 그땐 고정하지 않고 기본에 맡긴다.
-        const width = video.videoWidth;
-        const height = video.videoHeight;
-
-        if (width > 0 && height > 0) {
-            video.style.setProperty('--czp-pip-w', `${width}px`);
-            video.style.setProperty('--czp-pip-h', `${height}px`);
         }
 
         video.setAttribute(PIP_ACTIVE_ATTR, '');

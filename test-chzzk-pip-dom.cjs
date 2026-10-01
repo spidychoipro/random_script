@@ -336,8 +336,9 @@ async function main() {
         }
     );
 
-    // PiP 에서는 플레이어 스타일을 걷어내고 고유 크기로 고정한다.
-    // 이게 없으면 PiP 창이 플레이어 레이아웃 크기를 따라간다.
+    // PiP 에서는 플레이어 스타일을 걷어내되 창 크기는 건드리지 않는다.
+    // 영상 고유 크기(1920×1080)를 그대로 고정하면 PiP 창이 화면 밖으로
+    // 넘치고 영상이 잘린다. 고유 크기 CSS 변수를 아예 쓰지 않아야 한다.
     await scenario(
         'pip-style',
         page(LIVE_VIDEO),
@@ -358,15 +359,23 @@ async function main() {
             window.__czpTogglePip();
             await new Promise(resolve => setTimeout(resolve, 30));
 
+            const css = doc.getElementById('czp-pip-style').textContent;
+
             check('pip-style: style element injected',
                 doc.getElementById('czp-pip-style') !== null);
             check('pip-style: video marked', video.hasAttribute('data-czp-pip-active'));
-            check('pip-style: pinned to intrinsic width',
-                video.style.getPropertyValue('--czp-pip-w') === '1920px',
-                video.style.getPropertyValue('--czp-pip-w'));
-            check('pip-style: pinned to intrinsic height',
-                video.style.getPropertyValue('--czp-pip-h') === '1080px',
-                video.style.getPropertyValue('--czp-pip-h'));
+            check('pip-style: no intrinsic size variable set',
+                video.style.getPropertyValue('--czp-pip-w') === '' &&
+                video.style.getPropertyValue('--czp-pip-h') === '',
+                `${video.style.getPropertyValue('--czp-pip-w')}/${video.style.getPropertyValue('--czp-pip-h')}`);
+            check('pip-style: css does not reference intrinsic size variables',
+                !css.includes('--czp-pip-w') && !css.includes('--czp-pip-h'));
+            check('pip-style: css fits video to window instead of pinning',
+                /width:\s*100%\s*!important/.test(css) &&
+                /max-width:\s*100%\s*!important/.test(css) &&
+                /object-fit:\s*contain\s*!important/.test(css));
+            check('pip-style: css does not allow overflow',
+                !/max-width:\s*none/.test(css) && !/max-height:\s*none/.test(css));
         }
     );
 
@@ -390,7 +399,7 @@ async function main() {
         }
     );
 
-    // readyState 낮아서 videoWidth 가 0 이면 크기 고정을 건너뛴다
+    // 영상 고유 크기를 알 수 없거나 아무리 크더라도 크기를 강제하지 않는다.
     await scenario(
         'pip-style-no-dimensions',
         page(LIVE_VIDEO),
@@ -402,9 +411,43 @@ async function main() {
             await new Promise(resolve => setTimeout(resolve, 30));
 
             check('no-dimensions: still marked', video.hasAttribute('data-czp-pip-active'));
-            check('no-dimensions: no bogus size pinned',
-                video.style.getPropertyValue('--czp-pip-w') === '',
-                video.style.getPropertyValue('--czp-pip-w'));
+            check('no-dimensions: no size pinned at all',
+                video.style.getPropertyValue('--czp-pip-w') === '' &&
+                video.style.getPropertyValue('--czp-pip-h') === '' &&
+                video.style.getPropertyValue('--czp-pip-size') === '',
+                `${video.style.getPropertyValue('--czp-pip-w')}/${video.style.getPropertyValue('--czp-pip-h')}/${video.style.getPropertyValue('--czp-pip-size')}`);
+        }
+    );
+
+    // 4K 같은 큰 영상도 창 크기를 건드리지 않아야 한다. 플레이어가
+    // 건 인라인 width 는 그대로 두고, 스크립트가 새로 값을 끼워 넣지
+    // 않아야 한다 (크기는 CSS !important 규칙이 처리한다).
+    await scenario(
+        'pip-style-huge-dimensions',
+        page(LIVE_VIDEO),
+        ({ window, doc }) => {
+            const video = doc.querySelector('video');
+            const calls = stubVideo(window, video, { width: 3840, height: 2160 });
+
+            video.style.width = '760px';
+
+            return calls;
+        },
+        async ({ doc, window }) => {
+            const video = doc.querySelector('video');
+
+            window.__czpTogglePip();
+            await new Promise(resolve => setTimeout(resolve, 30));
+
+            check('huge-dimensions: marked', video.hasAttribute('data-czp-pip-active'));
+            check('huge-dimensions: 4K size not pinned',
+                video.style.getPropertyValue('--czp-pip-w') === '' &&
+                video.style.getPropertyValue('--czp-pip-h') === '' &&
+                video.style.getPropertyValue('--czp-pip-size') === '',
+                `${video.style.getPropertyValue('--czp-pip-w')}/${video.style.getPropertyValue('--czp-pip-h')}`);
+            check('huge-dimensions: player inline size untouched',
+                video.style.width === '760px' && video.style.height === '',
+                `${video.style.width}/${video.style.height}`);
         }
     );
 
